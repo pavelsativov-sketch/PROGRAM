@@ -103,22 +103,33 @@ export default function Settings() {
         <h3 style={{marginTop:0}}>AI-бот</h3>
         <label>Провайдер</label>
         <select value={form.ai_provider} onChange={e => setForm({...form, ai_provider: e.target.value})}>
-          <option value="free">Бесплатный (без ключа)</option>
-          <option value="anthropic">Anthropic Claude</option>
+          <option value="gemini">Google Gemini — рекомендуется ★</option>
           <option value="openai">OpenAI</option>
-          <option value="gemini">Google Gemini</option>
+          <option value="anthropic">Anthropic Claude</option>
+          <option value="free">Бесплатный без ключа (базовое качество)</option>
         </select>
         <label>Модель</label>
         <input value={form.ai_model || ''} onChange={e => setForm({...form, ai_model: e.target.value})}
           placeholder={
             form.ai_provider === 'openai' ? 'gpt-4o-mini'
-            : form.ai_provider === 'gemini' ? 'gemini-2.5-flash'
+            : form.ai_provider === 'gemini' ? 'gemini-2.5-flash-lite'
             : form.ai_provider === 'anthropic' ? 'claude-haiku-4-5'
             : 'openai'
           } />
+        {form.ai_provider === 'gemini' && (
+          <div className="ai-hint">
+            Лучший выбор: щедрые бесплатные лимиты и отличные ответы на русском.
+            Получите бесплатный ключ за минуту в{' '}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI&nbsp;Studio</a>{' '}
+            и вставьте ниже. По умолчанию <code>gemini-2.5-flash-lite</code> — самые щедрые
+            бесплатные лимиты (≈1000 запросов/день). При исчерпании квоты бот автоматически
+            пробует <code>gemini-2.5-flash</code>. Можно явно указать модель здесь.
+          </div>
+        )}
         {form.ai_provider === 'free' && (
-          <div style={{fontSize:12, color:'#888', marginTop:4}}>
-            Публичный бесплатный API (Pollinations.ai). Ключ не требуется. Для prod лучше платный провайдер.
+          <div className="ai-hint">
+            Публичный бесплатный API (Pollinations.ai) без ключа — работает «из коробки»,
+            но качество ниже и без гарантий. Для продаж лучше Gemini.
           </div>
         )}
         <label>API-ключ</label>

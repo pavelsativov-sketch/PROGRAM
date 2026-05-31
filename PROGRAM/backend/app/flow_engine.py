@@ -15,6 +15,16 @@ from .variables import validate_variable
 log = logging.getLogger(__name__)
 
 
+def _trigger_handoff(db: Session, shop: models.Shop, conv: models.Conversation, reason: str = "") -> None:
+    """Ставит диалог в handoff и шлёт уведомление во все каналы (best-effort)."""
+    conv.status = "handoff"
+    try:
+        from . import notifications
+        notifications.notify_handoff(db, shop, conv, reason=reason)
+    except Exception:
+        log.exception("notify_handoff failed conv=%s", conv.id)
+
+
 def _history(conv: models.Conversation) -> list[dict]:
     out = []
     for m in conv.messages:
@@ -322,7 +332,7 @@ def _execute_node(db, shop, conv, node, user_input):
 
     if kind == "handoff":
         _send(db, conv, data.get("text") or "Передаю диалог менеджеру.")
-        conv.status = "handoff"
+        _trigger_handoff(db, shop, conv, reason="сценарий: узел handoff")
         return True, node["id"]
 
     if kind == "end":
@@ -365,6 +375,19 @@ def run_conversation(db: Session, shop: models.Shop, conv: models.Conversation, 
             db.add(models.Message(conversation_id=conv.id, role="user", text=user_input))
             db.flush()
         return
+    # Бот выключен в настройках — не вмешиваемся AI, передаём менеджеру и алертим.
+    if not getattr(shop, "bot_enabled", True):
+        if user_input is not None:
+            db.add(models.Message(conversation_id=conv.id, role="user", text=user_input))
+            db.flush()
+        _trigger_handoff(db, shop, conv, reason="бот выключен в настройках")
+        try:
+            from . import notifications
+            notifications.notify_bot_disabled(db, shop)
+        except Exception:
+            log.exception("notify_bot_disabled failed shop=%s", shop.id)
+        db.flush()
+        return
     if not conv.flow or not conv.flow.graph or not conv.flow.graph.get("nodes"):
         _send(db, conv, "Сценарий не настроен.")
         return
@@ -380,7 +403,7 @@ def run_conversation(db: Session, shop: models.Shop, conv: models.Conversation, 
             yes_words = ("да", "ага", "угу", "ок", "окей", "хорошо", "давай", "давайте", "подключи", "подключите", "yes", "y")
             if any(low == w or low.startswith(w + " ") or low.startswith(w + ",") or low.startswith(w + ".") or low.startswith(w + "!") for w in yes_words):
                 _send(db, conv, "Хорошо, передаю диалог менеджеру 🌷")
-                conv.status = "handoff"
+                _trigger_handoff(db, shop, conv, reason="клиент подтвердил подключение менеджера")
                 vars_now.pop("_handoff_pending", None)
                 conv.variables = vars_now
                 db.flush()
@@ -393,7 +416,7 @@ def run_conversation(db: Session, shop: models.Shop, conv: models.Conversation, 
         cmd = _global_command(user_input)
         if cmd == "handoff":
             _send(db, conv, "Передаю диалог менеджеру, он скоро ответит 🌷")
-            conv.status = "handoff"
+            _trigger_handoff(db, shop, conv, reason="клиент попросил менеджера")
             db.flush()
             return
         if cmd == "stop":
@@ -432,7 +455,7 @@ def run_conversation(db: Session, shop: models.Shop, conv: models.Conversation, 
             shop.id, conv.id, current_id,
         )
         _send(db, conv, "Ой, что-то пошло не так. Передаю диалог менеджеру.")
-        conv.status = "handoff"
+        _trigger_handoff(db, shop, conv, reason="сбой сценария (safety guard)")
     conv.current_node_id = current_id or ""
     db.flush()
 

@@ -46,6 +46,9 @@ if settings.database_url.startswith("sqlite"):
             "business_hours": "ALTER TABLE shops ADD COLUMN business_hours JSON",
             "tg_bot_token": "ALTER TABLE shops ADD COLUMN tg_bot_token VARCHAR(256) DEFAULT ''",
             "tg_chat_id": "ALTER TABLE shops ADD COLUMN tg_chat_id VARCHAR(64) DEFAULT ''",
+            "bot_enabled": "ALTER TABLE shops ADD COLUMN bot_enabled BOOLEAN DEFAULT 1",
+            "daily_summary_hour": "ALTER TABLE shops ADD COLUMN daily_summary_hour INTEGER DEFAULT 21",
+            "followup_enabled": "ALTER TABLE shops ADD COLUMN followup_enabled BOOLEAN DEFAULT 1",
         }.items():
             if name not in shop_cols:
                 conn.exec_driver_sql(ddl)
@@ -60,6 +63,7 @@ if settings.database_url.startswith("sqlite"):
         for name, ddl in {
             "tags": "ALTER TABLE customers ADD COLUMN tags JSON",
             "notes": "ALTER TABLE customers ADD COLUMN notes TEXT DEFAULT ''",
+            "important_dates": "ALTER TABLE customers ADD COLUMN important_dates JSON",
         }.items():
             if name not in customer_cols:
                 conn.exec_driver_sql(ddl)
@@ -128,6 +132,16 @@ async def lifespan(_: FastAPI):
         # перезапуска backend или из-за ошибок AI-обработки.
         sch.add_job(retry_pending_inbox, "interval", seconds=30, id="retry_pending_inbox",
                     next_run_time=datetime.now(UTC), max_instances=1, coalesce=True)
+        # Мониторинг здоровья бота, сводки, напоминания и дожим брошенных диалогов.
+        from . import monitoring
+        sch.add_job(monitoring.check_bot_health, "interval", minutes=10, id="check_bot_health",
+                    max_instances=1, coalesce=True)
+        sch.add_job(monitoring.send_daily_summaries, "interval", minutes=30, id="send_daily_summaries",
+                    max_instances=1, coalesce=True)
+        sch.add_job(monitoring.check_reminders, "interval", hours=6, id="check_reminders",
+                    next_run_time=datetime.now(UTC), max_instances=1, coalesce=True)
+        sch.add_job(monitoring.followup_abandoned_dialogs, "interval", hours=2, id="followup_abandoned",
+                    max_instances=1, coalesce=True)
         sch.start()
         _scheduler = sch
         # Sync WA state в фоне — чтобы не блокировать старт, если мост недоступен.

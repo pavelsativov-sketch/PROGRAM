@@ -40,6 +40,9 @@ class ShopOut(BaseModel):
     # Не возвращаем сам token наружу — только флаг наличия
     tg_chat_id: str = ""
     tg_configured: bool = False
+    bot_enabled: bool = True
+    daily_summary_hour: int = 21
+    followup_enabled: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,6 +61,9 @@ class ShopSettingsIn(BaseModel):
     business_hours: dict | None = None
     tg_bot_token: str | None = None
     tg_chat_id: str | None = None
+    bot_enabled: bool | None = None
+    daily_summary_hour: int | None = None
+    followup_enabled: bool | None = None
 
 
 # ---- Flows ----

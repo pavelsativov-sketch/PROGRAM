@@ -61,4 +61,19 @@ def create_invoice_for_conversation(db: Session, shop: models.Shop, conv: models
         notifier.notify_new_order(shop, order)
     except Exception:
         pass
+    # Запись в центр уведомлений (Telegram уже отправлен выше — не дублируем).
+    try:
+        from . import notifications
+        notifications.record(
+            db, shop,
+            type="new_order",
+            severity="info",
+            title=f"Новый счёт №{order.id} на {order.total:.0f} {shop.currency}",
+            body=f"Клиент: {(order.details or {}).get('name') or '—'}",
+            link="/orders",
+            meta={"order_id": order.id},
+            telegram=False,
+        )
+    except Exception:
+        pass
     return order

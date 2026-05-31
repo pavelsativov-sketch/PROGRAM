@@ -43,6 +43,10 @@ def _resolve_creds(shop) -> tuple[str, str, str]:
         provider = "anthropic"
         key = (shop and shop.ai_api_key) or settings.anthropic_api_key
         model = (shop and shop.ai_model) or settings.anthropic_model
+    # Мягкий откат: выбран платный провайдер, но ключа нет нигде — чтобы бот не
+    # «умирал» с «ключ не задан», используем бесплатный Pollinations.ai.
+    if not (key or "").strip():
+        return "free", "", settings.free_model or "openai"
     return provider, key or "", model or ""
 
 
