@@ -22,11 +22,15 @@ _DEFAULT_BRIDGE_SECRETS = {
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
 
-    # AI provider: free|anthropic|openai|gemini. Default — free (Pollinations.ai,
-    # без API-ключа). Работает «из коробки», но публичное и без SLA — для prod
-    # лучше задать платного провайдера и ключ.
-    ai_provider: str = "free"
+    # AI provider: free|anthropic|openai|gemini. Default — gemini: бесплатный ключ
+    # в Google AI Studio (https://aistudio.google.com/apikey), щедрые лимиты и
+    # отличное качество на русском. Если ключ не задан (ни у магазина, ни в env) —
+    # _resolve_creds мягко откатывается на провайдер `free` (Pollinations.ai),
+    # чтобы бот работал «из коробки» без настройки.
+    ai_provider: str = "gemini"
     gemini_api_key: str = ""
+    # gemini-2.5-flash — отличное качество ответов на русском. Для большего объёма
+    # запросов в день можно поставить gemini-2.5-flash-lite в настройках магазина.
     gemini_model: str = "gemini-2.5-flash"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"

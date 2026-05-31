@@ -18,6 +18,7 @@ import Channels from './pages/Channels.jsx';
 import Settings from './pages/Settings.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
+import Landing from './pages/Landing.jsx';
 
 const NAV = [
   { to: '/dashboard',    label: 'Сегодня',    Icon: IconHome,    end: true },
@@ -153,7 +154,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      <Route path="/" element={<Navigate to={authStore.loggedIn ? "/dashboard" : "/login"} />} />
+      <Route path="/" element={authStore.loggedIn ? <Navigate to="/dashboard" /> : <Landing />} />
       <Route path="/dashboard" element={<Private><Dashboard /></Private>} />
       <Route path="/flows" element={<Private><FlowsList /></Private>} />
       <Route path="/flows/:id" element={<Private full><FlowEditor /></Private>} />
