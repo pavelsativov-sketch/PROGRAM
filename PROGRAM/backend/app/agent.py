@@ -263,8 +263,10 @@ def _looks_like_name(text: str) -> bool:
 
 def _extract_name_phrase(text: str) -> Optional[str]:
     """«меня зовут Анна», «я Анна» → 'Анна'."""
+    # ВАЖНО: «я»/«это» — только как отдельные слова (\b), иначе «дл-Я жены»
+    # и подобные хвосты слов на «я» ложно срабатывают и тянут мусор в имя.
     m = re.search(
-        r"(?:меня\s+зовут|зовут|я\s+|это\s+)([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]+(?:\s+[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]+){0,2})",
+        r"(?:меня\s+зовут|зовут|\bя\b|\bэто\b)\s+([A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]+(?:\s+[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё\-]+){0,2})",
         text or "",
         re.IGNORECASE,
     )
@@ -285,6 +287,30 @@ def _looks_like_address(text: str) -> bool:
     if any(c.isdigit() for c in s) and len(s.split()) >= 2:
         return True
     return False
+
+
+def _keyword_phrase(raw: str, low: str, keywords: tuple) -> Optional[str]:
+    """Достаёт короткое значение по ключевому слову из длинного сообщения.
+
+    Для одиночных стемов («жен», «мам») возвращает слово, в котором стем найден
+    («жены»). Для многословных ключей («день рожден») — сам ключ-фразу.
+    Так из «Хочу букет для жены на годовщину, …» получим recipient='жены',
+    а не весь текст.
+    """
+    for kw in keywords:
+        idx = low.find(kw)
+        if idx == -1:
+            continue
+        if " " in kw:
+            return raw[idx:idx + len(kw)].strip(" ,.!?")[:40] or None
+        start = raw.rfind(" ", 0, idx) + 1
+        end = raw.find(" ", idx)
+        if end == -1:
+            end = len(raw)
+        word = raw[start:end].strip(" ,.!?")
+        if word:
+            return word[:40]
+    return None
 
 
 def _heuristic_save_slot(text: str, missing: list[str], vars_: dict) -> Optional[str]:
@@ -317,13 +343,27 @@ def _heuristic_save_slot(text: str, missing: list[str], vars_: dict) -> Optional
     next_slot = missing[0]
 
     if next_slot == "recipient":
-        if any(w in low for w in _RECIPIENT_KEYWORDS) or (raw[:1].isupper() and 1 <= len(raw.split()) <= 3):
+        # Короткий ответ («жене», «маме») — сохраняем как есть.
+        if len(raw.split()) <= 4 and (
+            any(w in low for w in _RECIPIENT_KEYWORDS)
+            or (raw[:1].isupper() and 1 <= len(raw.split()) <= 3)
+        ):
             vars_["recipient"] = raw
+            return "recipient"
+        # Длинное сообщение с кучей данных — не сваливаем всё в слот,
+        # достаём только слово-получателя по ключу.
+        val = _keyword_phrase(raw, low, _RECIPIENT_KEYWORDS)
+        if val:
+            vars_["recipient"] = val
             return "recipient"
 
     if next_slot == "occasion":
-        if any(w in low for w in _OCCASION_KEYWORDS) or len(raw.split()) <= 5:
+        if len(raw.split()) <= 5 and (any(w in low for w in _OCCASION_KEYWORDS) or len(raw.split()) <= 3):
             vars_["occasion"] = raw
+            return "occasion"
+        val = _keyword_phrase(raw, low, _OCCASION_KEYWORDS)
+        if val:
+            vars_["occasion"] = val
             return "occasion"
 
     if next_slot == "name":
@@ -401,8 +441,10 @@ def _heuristic_save_multi(text: str, missing: list[str], vars_: dict) -> list[st
                 saved.append("address")
                 break
 
-    # Имя коротким единственным словом, если остаток это позволяет
-    if "name" in missing and "name" not in saved:
+    # Имя коротким единственным словом — ТОЛЬКО если бот сейчас спрашивает имя
+    # (name первый в очереди недостающих). Иначе «давай Классику» в ответ на
+    # вопрос про повод/букет ошибочно уходит в имя.
+    if "name" not in saved and missing and missing[0] == "name":
         # берём остаток без адреса/телефона/даты
         candidate = re.sub(r"[,;\n].*", "", rest).strip()
         if _looks_like_name(candidate):
@@ -410,6 +452,58 @@ def _heuristic_save_multi(text: str, missing: list[str], vars_: dict) -> list[st
             if ok:
                 vars_["name"] = norm
                 saved.append("name")
+
+    return saved
+
+
+def _pre_extract(text: str, missing: list[str], vars_: dict) -> list[str]:
+    """Консервативно достаёт ОДНОЗНАЧНЫЕ слоты из сообщения ДО вызова LLM.
+
+    Запускается всегда (а не только при сбое LLM), чтобы бот не переспрашивал
+    то, что клиент уже написал в одном сообщении: телефон, дату, явное «меня
+    зовут …» и адрес с уличным маркером. Контекстные слоты (получатель, повод,
+    выбор букета) не трогаем — их надёжнее распознаёт LLM по смыслу.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return []
+    low = raw.lower()
+    if _is_catalog_request(low) or is_non_answer(raw):
+        return []
+
+    saved: list[str] = []
+    rest = raw
+
+    if "delivery_date" in missing:
+        d = _extract_date(rest)
+        if d:
+            vars_["delivery_date"] = d[0]
+            saved.append("delivery_date")
+            rest = d[1] or rest
+
+    if "phone" in missing:
+        ph = _extract_phone(rest)
+        if ph:
+            vars_["phone"] = ph[0]
+            saved.append("phone")
+            rest = ph[1] or rest
+
+    if "name" in missing:
+        nm = _extract_name_phrase(rest)  # только явное «меня зовут …»
+        if nm:
+            vars_["name"] = nm
+            saved.append("name")
+
+    # Адрес — только при явном уличном маркере (ул./дом/кв/мкр/город…),
+    # чтобы не принять «3 розы» за адрес.
+    if "address" in missing:
+        for chunk in re.split(r"[,;\n]", rest):
+            chunk = chunk.strip(" .!?")
+            if len(chunk) >= 6 and _ADDR_HINT_RE.search(chunk):
+                ok, norm, _ = validate_variable("address", chunk)
+                vars_["address"] = norm if ok else chunk
+                saved.append("address")
+                break
 
     return saved
 
@@ -527,8 +621,11 @@ def _build_system(
         f"ЦЕЛЬ — довести клиента до оформления заказа, помогая, а не допрашивая. Нужные данные:\n{req_descr}\n\n"
         f"{next_hint}{anti_loop}\n"
         f"ПРАВИЛА:\n"
-        f"• Сохраняй слот сразу, как понял ответ — даже из короткой реплики и даже несколько слотов за раз.\n"
-        f"• НИКОГДА не переспрашивай уже собранное (смотри УЖЕ СОБРАНО). Один вопрос за ход.\n"
+        f"• Сохраняй слот сразу, как понял ответ — даже из короткой реплики. Если в ОДНОМ сообщении "
+        f"клиент дал сразу несколько данных (имя, телефон, адрес, дату, повод) — сохрани ВСЕ за один ход "
+        f"несколькими save_slot и не спрашивай их снова.\n"
+        f"• НИКОГДА не переспрашивай то, что уже есть в «УЖЕ СОБРАНО» — это раздражает клиента.\n"
+        f"• Задавай РОВНО ОДИН вопрос за сообщение (про следующий недостающий пункт). Не вываливай 2–3 вопроса разом.\n"
         f"• Если клиент колеблется или пишет «не знаю / посоветуйте» — НЕ пиши это в slot. Возьми инициативу: "
         f"  предложи 1–2 конкретных букета из каталога под его повод и кратко объясни, почему они подойдут.\n"
         f"• Когда уместно — мягко и ненавязчиво предложи дополнение (открытка с пожеланием, бОльший размер букета). "
@@ -555,6 +652,62 @@ def _build_system(
         f'  {{"type":"handoff"}}\n'
         f"reply обязателен и не пустой. actions — массив (может быть пустым). Других полей не добавляй."
     )
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    """429 / RESOURCE_EXHAUSTED / quota — повод попробовать запасную модель."""
+    s = f"{type(exc).__name__} {exc}".lower()
+    return any(w in s for w in ("resourceexhausted", "resource_exhausted", "quota", "429", "rate limit", "exceeded"))
+
+
+def _gemini_chat(key: str, model: str, system: str, history: list[dict], user_text: str) -> str:
+    """Один вызов Gemini с авто-фолбэком по моделям при исчерпании квоты.
+
+    У каждой модели свой дневной лимит, поэтому при 429 на основной модели
+    пробуем запасные (gemini_fallback_models) — это заметно поднимает суммарный
+    бесплатный объём и не даёт боту скатиться на «тупой» эвристический режим.
+    """
+    import google.generativeai as genai
+
+    genai.configure(api_key=key)
+    gem_hist = [
+        {"role": "user" if h["role"] == "user" else "model", "parts": [h["content"]]}
+        for h in history
+    ]
+    # Порядок попыток: основная модель, затем запасные (без дублей).
+    candidates: list[str] = [model]
+    for fb in settings.gemini_fallback_models:
+        if fb and fb not in candidates:
+            candidates.append(fb)
+
+    last_exc: Optional[Exception] = None
+    for i, name in enumerate(candidates):
+        try:
+            m = genai.GenerativeModel(
+                model_name=name,
+                system_instruction=system,
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "temperature": 0.6,
+                },
+            )
+            chat = m.start_chat(history=gem_hist)
+            r = chat.send_message(
+                user_text,
+                request_options={"timeout": settings.ai_timeout_seconds},
+            )
+            if i > 0:
+                log.info("agent: gemini fell back to model %s", name)
+            return (r.text or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if _is_quota_error(exc) and i < len(candidates) - 1:
+                log.warning("agent: gemini model %s quota exhausted, trying next", name)
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+    return ""
 
 
 def _call_llm(shop, system: str, history: list[dict], user_text: str) -> Optional[dict]:
@@ -600,27 +753,7 @@ def _call_llm(shop, system: str, history: list[dict], user_text: str) -> Optiona
             )
             raw = (r.choices[0].message.content or "").strip()
         else:
-            import google.generativeai as genai
-
-            genai.configure(api_key=key)
-            m = genai.GenerativeModel(
-                model_name=model,
-                system_instruction=system,
-                generation_config={
-                    "response_mime_type": "application/json",
-                    "temperature": 0.6,
-                },
-            )
-            gem_hist = [
-                {"role": "user" if h["role"] == "user" else "model", "parts": [h["content"]]}
-                for h in history
-            ]
-            chat = m.start_chat(history=gem_hist)
-            r = chat.send_message(
-                user_text,
-                request_options={"timeout": settings.ai_timeout_seconds},
-            )
-            raw = (r.text or "").strip()
+            raw = _gemini_chat(key, model, system, history, user_text)
     except Exception:
         log.exception("agent LLM call failed")
         return None
@@ -771,6 +904,17 @@ def run_agent_turn(
     node_data = node_data or {}
 
     catalog = _catalog_text(db, shop.id, shop.currency or "RUB")
+
+    # Детерминированно достаём однозначные данные (телефон/дата/имя/адрес) из
+    # сообщения ДО вызова LLM и сразу сохраняем. Тогда модель видит их в
+    # «УЖЕ СОБРАНО» и не переспрашивает то, что клиент уже написал.
+    if user_input:
+        pre_vars = dict(conv.variables or {})
+        pre_missing = [s for s in required if not pre_vars.get(s)]
+        if _pre_extract(user_input, pre_missing, pre_vars):
+            conv.variables = pre_vars
+            db.flush()
+
     collected = {k: v for k, v in (conv.variables or {}).items() if v and not k.startswith("_")}
     last_q = _last_bot_question(conv)
 

@@ -29,9 +29,15 @@ class Settings(BaseSettings):
     # чтобы бот работал «из коробки» без настройки.
     ai_provider: str = "gemini"
     gemini_api_key: str = ""
-    # gemini-2.5-flash — отличное качество ответов на русском. Для большего объёма
-    # запросов в день можно поставить gemini-2.5-flash-lite в настройках магазина.
-    gemini_model: str = "gemini-2.5-flash"
+    # gemini-2.5-flash-lite — у него самые щедрые бесплатные лимиты
+    # (30 RPM, 1000 запросов/день, 1M TPM против 250/день у обычного flash),
+    # при этом качество ответов на русском отличное для диалога-продажи.
+    # При исчерпании квоты _call_llm автоматически пробует запасные модели
+    # (см. gemini_fallback_models), чтобы бот не «тупел» на эвристиках.
+    gemini_model: str = "gemini-2.5-flash-lite"
+    # Запасные Gemini-модели на случай 429/quota по основной — у каждой
+    # отдельный дневной лимит, так суммарный бесплатный объём заметно выше.
+    gemini_fallback_models: tuple[str, ...] = ("gemini-2.5-flash", "gemini-2.0-flash")
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
     anthropic_api_key: str = ""

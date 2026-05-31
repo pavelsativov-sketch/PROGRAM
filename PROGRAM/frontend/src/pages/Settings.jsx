@@ -112,7 +112,7 @@ export default function Settings() {
         <input value={form.ai_model || ''} onChange={e => setForm({...form, ai_model: e.target.value})}
           placeholder={
             form.ai_provider === 'openai' ? 'gpt-4o-mini'
-            : form.ai_provider === 'gemini' ? 'gemini-2.5-flash'
+            : form.ai_provider === 'gemini' ? 'gemini-2.5-flash-lite'
             : form.ai_provider === 'anthropic' ? 'claude-haiku-4-5'
             : 'openai'
           } />
@@ -121,8 +121,9 @@ export default function Settings() {
             Лучший выбор: щедрые бесплатные лимиты и отличные ответы на русском.
             Получите бесплатный ключ за минуту в{' '}
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI&nbsp;Studio</a>{' '}
-            и вставьте ниже. Модели: <code>gemini-2.5-flash</code> (качество) или{' '}
-            <code>gemini-2.5-flash-lite</code> (больше запросов в день).
+            и вставьте ниже. По умолчанию <code>gemini-2.5-flash-lite</code> — самые щедрые
+            бесплатные лимиты (≈1000 запросов/день). При исчерпании квоты бот автоматически
+            пробует <code>gemini-2.5-flash</code>. Можно явно указать модель здесь.
           </div>
         )}
         {form.ai_provider === 'free' && (
