@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(powershell)",
+      "Exec(powershell.exe)",
+      "Exec(py)",
+      "Exec(winget install)",
+      "Exec(npm install)",
+      "Exec(mkdir)",
+      "Exec(rm)",
+      "Exec(sleep)",
+      "Exec(\"./.venv/Scripts/alembic.exe\" upgrade)",
+      "Exec(\"./.venv/Scripts/python.exe\")",
+      "Exec(\"C:/Users/PC/Desktop/PROGRAM/backend/.venv/Scripts/pip.exe\" install)",
+      "Exec(\"./.venv/Scripts/ruff.exe\" check)",
+      "Exec(ls)",
+      "Exec(./.venv/Scripts/python.exe)",
+      "Exec(npm run)",
+      "Exec(node)",
+      "Exec(./.venv/Scripts/uvicorn.exe)",
+      "Exec(curl)",
+      "Exec(netstat)",
+      "Exec(cat)",
+      "Exec(./backend/.venv/Scripts/python.exe)",
+      "Exec(grep)",
+      "Exec(.\\.venv\\Scripts\\python.exe)",
+      "Exec(\"C:/Users/PC/Desktop/PROGRAM/backend/.venv/Scripts/python.exe\")",
+      "Exec(./.venv/Scripts/alembic.exe upgrade)",
+      "Exec(wc)",
+      "Exec(python)",
+      "Exec(.venv/Scripts/python)",
+      "Exec(.venv/Scripts/pip install)",
+      "Exec(.\\.venv\\Scripts\\python)",
+      "Exec(find)",
+      "Exec(./.venv/Scripts/python)"
+    ]
+  }
+}

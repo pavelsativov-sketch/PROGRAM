@@ -1,0 +1,34 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Env / runtime
+.env
+.pids.json
+logs/
+
+# Local DBs
+*.db
+*.db-journal
+data.db
+_agent_dbg.db
+
+# Channel sessions / artefacts
+ig_sessions/
+.wa-sessions/
+whatsapp-bridge/.wa-sessions/
+
+# Frontend build
+frontend/dist/
+
+# Misc / accidental
+*.docx
+nul
+.pytest_cache/
+.ruff_cache/
+backend/uploads/
+backend/data.db*
+# Local docker volumes (на случай bind-mount экспериментов)
+db-backups/
+redis-data/

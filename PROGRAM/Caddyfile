@@ -1,0 +1,28 @@
+{
+    # ACME email берём из переменной окружения, если задана.
+    email {$ACME_EMAIL:admin@localhost}
+}
+
+{$DOMAIN} {
+    encode gzip
+
+    # ----- Security headers -----
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        # Жёсткий CSP, не ломает SPA: js/css/изображения с того же origin, API через fetch, инлайн-стили для pay-страницы.
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        # Скрываем серверный заголовок
+        -Server
+    }
+
+    # API и публичные pay-страницы — на backend
+    @api path /api/* /pay/* /pay
+    reverse_proxy @api backend:8000
+
+    # Остальное — на frontend (SPA)
+    reverse_proxy frontend:80
+}
