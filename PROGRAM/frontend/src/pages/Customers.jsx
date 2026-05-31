@@ -4,7 +4,7 @@ import { api } from '../api';
 import { formatMoney, initials, formatTimeAgo } from '../format';
 import {
   IconUsers, IconWhatsapp, IconInstagram, IconLab, IconChat,
-  IconNote, IconClose, IconChevron, IconBag,
+  IconNote, IconClose, IconChevron, IconBag, IconCalendar,
 } from '../icons.jsx';
 
 const CHANNEL_ICON = {
@@ -145,6 +145,11 @@ function CustomerDetail({ id, currency, onBack }) {
     setC({ ...c, notes: r.notes });
     flash('заметка сохранена');
   };
+  const saveDates = async (important_dates) => {
+    const r = await api.customers.update(id, { important_dates });
+    setC({ ...c, important_dates: r.important_dates });
+    flash('даты сохранены');
+  };
 
   return (
     <div className="fade-in">
@@ -237,6 +242,16 @@ function CustomerDetail({ id, currency, onBack }) {
             </div>
           </div>
 
+          <div className="card">
+            <div className="header" style={{marginBottom:10}}>
+              <h3 className="serif" style={{fontStyle:'italic'}}><IconCalendar size={18} style={{verticalAlign:'middle', marginRight:6}} />Важные даты</h3>
+            </div>
+            <ImportantDates initial={c.important_dates || []} onSave={saveDates} />
+            <div className="muted" style={{fontSize:12, marginTop:8}}>
+              Дни рождения, годовщины. Менеджер получит напоминание за день — отличный повод предложить заказать снова.
+            </div>
+          </div>
+
           {c.conversations.length > 0 && (
             <div className="card">
               <h3 className="serif" style={{fontStyle:'italic', marginBottom:10}}>Диалоги</h3>
@@ -293,4 +308,52 @@ function NotesEditor({ initial, onSave }) {
       </div>
     </div>
   );
+}
+
+const DATE_LABELS = ['День рождения', 'Годовщина', 'Другое'];
+
+function ImportantDates({ initial, onSave }) {
+  const [rows, setRows] = useState(() => (initial || []).map(normRow));
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setRows((initial || []).map(normRow)); }, [initial]);
+
+  const dirty = JSON.stringify(rows) !== JSON.stringify((initial || []).map(normRow));
+
+  const update = (i, patch) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  const add = () => setRows(rs => [...rs, { label: 'День рождения', date: '', recurring: true }]);
+  const remove = (i) => setRows(rs => rs.filter((_, idx) => idx !== i));
+  const save = async () => {
+    setBusy(true);
+    try { await onSave(rows.filter(r => r.date)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      {rows.length === 0 && <div className="muted" style={{fontSize:13, marginBottom:8}}>Дат пока нет.</div>}
+      {rows.map((r, i) => (
+        <div key={i} className="row" style={{gap:8, marginBottom:8, flexWrap:'wrap', alignItems:'center'}}>
+          <select value={DATE_LABELS.includes(r.label) ? r.label : 'Другое'}
+                  onChange={e => update(i, { label: e.target.value })} style={{width:150}}>
+            {DATE_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <input type="date" value={r.date} onChange={e => update(i, { date: e.target.value })} style={{width:160}} />
+          <label className="row" style={{gap:5, margin:0, textTransform:'none', fontSize:12, color:'var(--ink-2)', letterSpacing:0, fontWeight:500}}>
+            <input type="checkbox" style={{width:'auto', margin:0}} checked={!!r.recurring} onChange={e => update(i, { recurring: e.target.checked })} />
+            ежегодно
+          </label>
+          <button className="ghost small" onClick={() => remove(i)} title="удалить"><IconClose size={14} /></button>
+        </div>
+      ))}
+      <div className="row" style={{marginTop:6, justifyContent:'space-between'}}>
+        <button className="secondary small" onClick={add}>+ Добавить дату</button>
+        <button className="small" onClick={save} disabled={busy || !dirty}>
+          {busy ? 'Сохранение…' : 'Сохранить'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function normRow(r) {
+  return { label: r.label || 'Другое', date: (r.date || '').slice(0, 10), recurring: r.recurring !== false };
 }

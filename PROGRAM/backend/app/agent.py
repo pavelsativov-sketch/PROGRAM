@@ -729,16 +729,10 @@ def _apply_actions(
         if t == "handoff":
             conv.status = "handoff"
             state["handoff"] = True
-            # Уведомляем магазин в Telegram (если настроен) — best-effort.
+            # Центр уведомлений + Telegram + браузер-пуш (best-effort).
             try:
-                from . import notifier
-                last_user = next(
-                    (m.text for m in reversed(conv.messages) if m.role == "user"), ""
-                )
-                cust_name = (conv.customer.name if conv.customer else "") or (
-                    conv.customer.external_id if conv.customer else "клиент"
-                )
-                notifier.notify_handoff(shop, conv.id, cust_name, last_user)
+                from . import notifications
+                notifications.notify_handoff(db, shop, conv)
             except Exception:
                 log.exception("notify_handoff failed conv=%s", conv.id)
             continue
@@ -878,6 +872,16 @@ def run_agent_turn(
 
         new_vars["_ai_fail_count"] = meta_fail
         conv.variables = new_vars
+        # Несколько подряд неудач LLM при настроенном платном провайдере —
+        # вероятно, проблема с ключом/лимитами. Алертим магазин (с анти-спамом).
+        if meta_fail >= 3:
+            try:
+                provider, key, _ = _resolve_creds(shop)
+                if provider != "free" and _has_creds(provider, key):
+                    from . import notifications
+                    notifications.notify_ai_error(db, shop, detail=f"Провайдер: {provider}")
+            except Exception:
+                log.exception("notify_ai_error failed shop=%s", shop.id)
         if not already_greeted:
             _send(db, conv, f"Здравствуйте! Это {shop.name} 🌸 Я помогу подобрать букет. Для кого и по какому поводу?")
         elif meta_fail < 3:

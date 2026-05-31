@@ -4,8 +4,9 @@ import { api } from './api';
 import { authStore } from './auth';
 import {
   IconHome, IconFlow, IconLab, IconChat, IconBag,
-  IconBouquet, IconLeaf, IconWrench, IconUsers, IconLogout,
+  IconBouquet, IconLeaf, IconWrench, IconUsers, IconLogout, IconChart,
 } from './icons.jsx';
+import NotificationCenter from './components/NotificationCenter.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import FlowsList from './pages/FlowsList.jsx';
 import FlowEditor from './pages/FlowEditor.jsx';
@@ -16,6 +17,7 @@ import Customers from './pages/Customers.jsx';
 import Simulator from './pages/Simulator.jsx';
 import Channels from './pages/Channels.jsx';
 import Settings from './pages/Settings.jsx';
+import Analytics from './pages/Analytics.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
 import Landing from './pages/Landing.jsx';
@@ -25,6 +27,7 @@ const NAV = [
   { to: '/orders',       label: 'Заказы',     Icon: IconBag },
   { to: '/conversations',label: 'Диалоги',    Icon: IconChat,    badge: 'handoff' },
   { to: '/customers',    label: 'Клиенты',    Icon: IconUsers },
+  { to: '/analytics',    label: 'Аналитика',  Icon: IconChart },
   { to: '/products',     label: 'Каталог',    Icon: IconBouquet },
   { to: '/flows',        label: 'Сценарии',   Icon: IconFlow },
   { to: '/simulator',    label: 'Симулятор',  Icon: IconLab },
@@ -48,10 +51,6 @@ function Layout({ children, full }) {
       try {
         const list = await api.conversations.list('handoff');
         setHandoffCount(list.length);
-        if (list.length > lastHandoffRef.current && lastHandoffRef.current > 0) {
-          // Появилось НОВОЕ handoff-сообщение (а не то, что было при загрузке)
-          await maybeNotify(list[0]);
-        }
         lastHandoffRef.current = list.length;
       } catch {}
     };
@@ -78,6 +77,7 @@ function Layout({ children, full }) {
         <button className="menu-btn" onClick={() => setDrawerOpen(o => !o)} aria-label="Меню">☰</button>
         <span className="brand">Floral<span style={{color:'var(--terracotta)'}}>·</span></span>
         {handoffCount > 0 && <span className="nav-badge">{handoffCount}</span>}
+        <div style={{marginLeft:'auto'}}><NotificationCenter /></div>
       </header>
       {drawerOpen && <div className="drawer-overlay open" onClick={() => setDrawerOpen(false)} />}
       <aside className={`sidebar ${drawerOpen ? 'open' : ''}`}>
@@ -114,36 +114,6 @@ function Layout({ children, full }) {
   );
 }
 
-/**
- * Тихо запрашивает разрешение и показывает локальную нотификацию.
- * Не использует Service Worker / Push API — только Notifications API,
- * который работает пока вкладка открыта (этого достаточно для менеджера в браузере).
- */
-async function maybeNotify(conversation) {
-  if (typeof Notification === 'undefined') return;
-  if (Notification.permission === 'denied') return;
-  if (Notification.permission === 'default') {
-    const r = await Notification.requestPermission();
-    if (r !== 'granted') return;
-  }
-  try {
-    const cust = conversation.customer || {};
-    const title = `Нужен менеджер · ${cust.name || cust.external_id || `Диалог #${conversation.id}`}`;
-    const body = (conversation.last_message?.text || '').slice(0, 140) || 'Клиент ждёт ответа';
-    const n = new Notification(title, {
-      body,
-      tag: `handoff-${conversation.id}`,
-      icon: '/favicon.svg',
-      silent: false,
-    });
-    n.onclick = () => {
-      window.focus();
-      window.location.href = `/conversations/${conversation.id}`;
-      n.close();
-    };
-  } catch {}
-}
-
 function Private({ children, full }) {
   if (!authStore.loggedIn) return <Navigate to="/login" />;
   return <Layout full={full}>{children}</Layout>;
@@ -170,6 +140,7 @@ export default function App() {
       <Route path="/products" element={<Private><Products /></Private>} />
       <Route path="/channels" element={<Private><Channels /></Private>} />
       <Route path="/settings" element={<Private><Settings /></Private>} />
+      <Route path="/analytics" element={<Private><Analytics /></Private>} />
     </Routes>
   );
 }

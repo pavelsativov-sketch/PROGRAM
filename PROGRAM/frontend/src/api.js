@@ -89,8 +89,20 @@ export const api = {
   },
   analytics: {
     summary: () => req('/api/analytics/summary'),
+    report: (days) => req('/api/analytics/report' + (days ? `?days=${days}` : '')),
   },
   notifications: {
+    list: (opts = {}) => {
+      const p = new URLSearchParams();
+      if (opts.unread) p.set('unread', 'true');
+      if (opts.limit) p.set('limit', String(opts.limit));
+      const qs = p.toString();
+      return req('/api/notifications' + (qs ? `?${qs}` : ''));
+    },
+    unreadCount: () => req('/api/notifications/unread-count'),
+    markRead: (id) => req(`/api/notifications/${id}/read`, { method: 'POST' }),
+    markAllRead: () => req('/api/notifications/read-all', { method: 'POST' }),
+    remove: (id) => req(`/api/notifications/${id}`, { method: 'DELETE' }),
     telegramTest: (d) => req('/api/notifications/telegram/test', { method: 'POST', body: JSON.stringify(d || {}) }),
     telegramDiscoverChat: (d) => req('/api/notifications/telegram/discover-chat', { method: 'POST', body: JSON.stringify(d || {}) }),
   },

@@ -118,6 +118,7 @@ def get_customer(
         "external_id": c.external_id or "",
         "tags": list(c.tags or []),
         "notes": c.notes or "",
+        "important_dates": list(c.important_dates or []),
         "created_at": _to_aware_utc(c.created_at).isoformat() if c.created_at else None,
         "stats": {
             "orders_count": len(orders),
@@ -150,6 +151,7 @@ class CustomerPatch(BaseModel):
     name: str | None = None
     tags: list[str] | None = None
     notes: str | None = None
+    important_dates: list[dict] | None = None
 
 
 @router.put("/{cid}")
@@ -176,6 +178,21 @@ def update_customer(
             seen.add(key)
             cleaned.append(t)
         data["tags"] = cleaned[:20]
+    if "important_dates" in data:
+        # Нормализуем важные даты: label + date(YYYY-MM-DD) + recurring(bool).
+        norm: list[dict] = []
+        for item in (data["important_dates"] or []):
+            if not isinstance(item, dict):
+                continue
+            date = (str(item.get("date") or "")).strip()[:10]
+            if not date:
+                continue
+            norm.append({
+                "label": (str(item.get("label") or "")).strip()[:64] or "Важная дата",
+                "date": date,
+                "recurring": bool(item.get("recurring", True)),
+            })
+        data["important_dates"] = norm[:20]
     for k, v in data.items():
         setattr(c, k, v)
     db.commit()
@@ -187,4 +204,5 @@ def update_customer(
         "name": c.name or "",
         "tags": list(c.tags or []),
         "notes": c.notes or "",
+        "important_dates": list(c.important_dates or []),
     }

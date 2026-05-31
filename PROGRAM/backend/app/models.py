@@ -54,6 +54,13 @@ class Shop(Base):
     # Ключ зашифрован Fernet.
     tg_bot_token = Column(EncryptedString(256), default="")
     tg_chat_id = Column(String(64), default="")
+    # Бот включён? Если False — входящие не обрабатываются AI, а сразу уходят
+    # менеджеру (handoff). Используется для алертов «бот отключён».
+    bot_enabled = Column(Boolean, default=True)
+    # Час (0-23) в таймзоне магазина, когда слать ежедневную сводку в Telegram.
+    daily_summary_hour = Column(Integer, default=21)
+    # Дожимать ли брошенные диалоги авто-сообщением в канал.
+    followup_enabled = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     # Все JWT, выданные ДО этого момента — невалидны. Обновляется при login и смене пароля.
@@ -93,6 +100,9 @@ class Customer(Base):
     # CRM-поля: теги-маркеры (VIP, корпоратив, жалобщик и т.п.) и свободные заметки менеджера.
     tags = Column(JSON, default=list)
     notes = Column(Text, default="")
+    # Важные даты клиента для напоминаний о повторных продажах.
+    # Список словарей: [{"label": "День рождения мамы", "date": "2026-03-08", "recurring": true}].
+    important_dates = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     __table_args__ = (Index("ix_customer_shop_channel_ext", "shop_id", "channel", "external_id", unique=True),)
@@ -201,6 +211,32 @@ class IncomingMessage(Base):
     __table_args__ = (
         Index("ix_inbox_status_received", "status", "received_at"),
         Index("ix_inbox_shop_status", "shop_id", "status"),
+    )
+
+
+class Notification(Base):
+    """Уведомление магазину: центр уведомлений в приложении + фан-аут в Telegram/пуш.
+
+    Типы (``type``): handoff | bot_down | bot_idle | bot_disabled | ai_error |
+    new_order | order_paid | reminder | daily_summary | followup.
+    ``dedup_key`` + временное окно защищают от спама повторными алертами.
+    """
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), index=True, nullable=False)
+    type = Column(String(32), nullable=False)
+    severity = Column(String(16), default="info")     # info | warning | critical
+    title = Column(String(255), nullable=False)
+    body = Column(Text, default="")
+    link = Column(String(255), default="")            # in-app ссылка, напр. /conversations?filter=handoff
+    meta = Column(JSON, default=dict)
+    dedup_key = Column(String(128), default="", index=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    __table_args__ = (
+        Index("ix_notif_shop_created", "shop_id", "created_at"),
+        Index("ix_notif_shop_read", "shop_id", "read_at"),
     )
 
 

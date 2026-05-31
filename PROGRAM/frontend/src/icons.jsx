@@ -82,3 +82,12 @@ export const IconCalendar = (p) => (
 export const IconNote = (p) => (
   <Svg {...p}><path d="M5 4h11l3 3v13H5z" /><path d="M9 9h6M9 13h6M9 17h4" /></Svg>
 );
+export const IconBell = (p) => (
+  <Svg {...p}><path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5Z" /><path d="M10 19a2 2 0 0 0 4 0" /></Svg>
+);
+export const IconChart = (p) => (
+  <Svg {...p}><path d="M4 4v16h16" /><path d="M8 14v3M12.5 10v7M17 6v11" /></Svg>
+);
+export const IconTrash = (p) => (
+  <Svg {...p}><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></Svg>
+);

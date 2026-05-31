@@ -56,6 +56,21 @@ def set_status(oid: int, status: str, db: Session = Depends(get_db), shop: model
             notifier.notify_paid(shop, o)
         except Exception:
             pass
+        try:
+            from .. import notifications
+            notifications.record(
+                db, shop,
+                type="order_paid",
+                severity="info",
+                title=f"Оплачен заказ №{o.id} — {o.total:.0f} {shop.currency}",
+                body=f"Клиент: {(o.details or {}).get('name') or '—'}",
+                link="/orders",
+                meta={"order_id": o.id},
+                telegram=False,
+            )
+            db.commit()
+        except Exception:
+            pass
     return {"ok": True}
 
 
